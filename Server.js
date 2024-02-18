@@ -6,7 +6,8 @@ const transactionRoutes = require("./Routes/transactionRoutes");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const MONGODV_URI = "mongodb://localhost:27017/Node";
+const MONGODV_URI =
+  "mongodb://localhost:27017/?readPreference=primary&appname=MongoDB%20Compass&directConnection=true&ssl=false";
 
 app.use(express.json());
 

@@ -1,18 +1,19 @@
 const Transaction = require("../Model/transaction");
 const cache = require("./cache");
 
-function getTopUsers(month, year, limit, callback) {
+async function getTopUsers(month, year, limit) {
   const cacheKey = `topUsers_${month}_${year}_${limit}`;
   const cacheResult = cache.get(cacheKey);
-  if (cacheResult) {
-    callback(null, cacheResult);
-  } else {
-    const startDate = new Date(year, month - 1, 1); // Months are zero-based so we need to subtract one from the given value.
-    const endDate = new Date(year, month, 0, 23, 59, 59); // Last day of the given year
-    console.log("INNNNNN HERERRRE", startDate, endDate);
 
-    Transaction.aggregate(
-      [
+  if (cacheResult) {
+    console.log("INNNN++++");
+    return cacheResult;
+  } else {
+    const startDate = new Date(year, month - 1, 1).toISOString();
+    const endDate = new Date(year, month, 0, 23, 59, 59).toISOString();
+
+    try {
+      const topUsers = await Transaction.aggregate([
         {
           $match: {
             Timestamp: {
@@ -24,39 +25,48 @@ function getTopUsers(month, year, limit, callback) {
         {
           $group: {
             _id: "$UserID",
-            totalAmount: { $sum: "$Amount" },
+            totalAmount: {
+              $sum: "$Amount",
+            },
           },
         },
         {
-          $sort: { totalAmount: -1 },
+          $project: {
+            _id: 0,
+            UserID: "$_id",
+            totalAmount: 1,
+          },
+        },
+        {
+          $sort: {
+            totalAmount: -1,
+          },
         },
         {
           $limit: limit,
         },
-      ],
-      (err, topUsers) => {
-        if (err) {
-          callback(err);
-        } else {
-          cache.set(cacheKey, topUsers);
-          callback(null, topUsers);
-        }
-      }
-    );
+      ])
+        .allowDiskUse(true)
+        .exec();
+
+      cache.set(cacheKey, topUsers);
+      return topUsers;
+    } catch (err) {
+      throw err;
+    }
   }
 }
 
-function getHighestTransHour(year, callback) {
+async function getHighestTransHour(year) {
   const cacheKey = `getHighestTransHour${year}`;
   const cacheResult = cache.get(cacheKey);
   if (cacheResult) {
-    callback(null, cacheResult);
+    return cacheResult;
   } else {
-    const startDate = new Date(year, 0, 1); // First  day of the year
-    const endDate = new Date(year + 1, 0, 0); // Last day of the given year
-    console.log("INNNNNN HERERRRE", startDate, endDate);
-    Transaction.aggregate(
-      [
+    const startDate = new Date(year, 0, 1).toISOString(); // First day of the year
+    const endDate = new Date(year + 1, 0, 0).toISOString(); // Last day of the given year
+    try {
+      const result = await Transaction.aggregate([
         {
           $match: {
             Timestamp: {
@@ -68,9 +78,9 @@ function getHighestTransHour(year, callback) {
         {
           $group: {
             _id: {
-              month: { $month: "$Timestamp" },
-              day: { $dayOfMonth: "$Timestamp" },
-              hour: { $hour: "$Timestamp" },
+              month: { $month: { $toDate: "$Timestamp" } }, // Convert string to date
+              day: { $dayOfMonth: { $toDate: "$Timestamp" } }, // Convert string to date
+              hour: { $hour: { $toDate: "$Timestamp" } }, // Convert string to date
             },
             count: { $sum: 1 },
           },
@@ -80,9 +90,15 @@ function getHighestTransHour(year, callback) {
         },
         {
           $group: {
-            _id: { month: "$_id.month" },
-            highestTransHour: { $first: "$_id" },
-            totalTransactions: { $first: "$count" },
+            _id: {
+              month: "$_id.month",
+            },
+            highestTransHour: {
+              $first: "$_id",
+            },
+            totalTransactions: {
+              $first: "$count",
+            },
           },
         },
         {
@@ -93,16 +109,14 @@ function getHighestTransHour(year, callback) {
             totalTransactions: 1,
           },
         },
-      ],
-      (err, result) => {
-        if (err) {
-          callback(err);
-        } else {
-          cache.set(cacheKey, result);
-          callback(null, result);
-        }
-      }
-    );
+      ])
+        .allowDiskUse(true)
+        .exec();
+      cache.set(cacheKey, result);
+      return result;
+    } catch (err) {
+      throw err;
+    }
   }
 }
 
